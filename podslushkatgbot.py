@@ -20,22 +20,22 @@ post_id = 0
 
 # ====== КЛАВИАТУРЫ ======
 main_kb = ReplyKeyboardMarkup(
-    keyboard=[[KeyboardButton(text="📝 Новый пост")]],
+    keyboard=[[KeyboardButton(text="📝 Новий пост")]],
     resize_keyboard=True
 )
 
 anon_kb = ReplyKeyboardMarkup(
     keyboard=[
-        [KeyboardButton(text="🎭 Анонимно")],
-        [KeyboardButton(text="👤 Не анонимно")]
+        [KeyboardButton(text="🎭 Анонімно")],
+        [KeyboardButton(text="👤 Не анонімно")]
     ],
     resize_keyboard=True
 )
 
 confirm_kb = ReplyKeyboardMarkup(
     keyboard=[
-        [KeyboardButton(text="✅ Подтвердить")],
-        [KeyboardButton(text="❌ Отмена")]
+        [KeyboardButton(text="✅ Підтвердити")],
+        [KeyboardButton(text="❌ Відміна")]
     ],
     resize_keyboard=True
 )
@@ -53,11 +53,11 @@ async def check_access(user_id: int) -> bool:
 @dp.message(CommandStart())
 async def start(message: Message):
     if not await check_access(message.from_user.id):
-        await message.answer("🚫 Доступ закрыт")
+        await message.answer("🚫 Немає доступа")
         return
 
     await message.answer(
-        "👋 <b>Подслушано бот</b>\n📝 Нажми «Новый пост»",
+        "👋 <b>Подслушано бот</b>\n📝 Нажми «Новий пост»",
         parse_mode=ParseMode.HTML,
         reply_markup=main_kb
     )
@@ -67,11 +67,11 @@ async def start(message: Message):
 @dp.message(F.text == "📝 Новый пост")
 async def new_post(message: Message):
     if not await check_access(message.from_user.id):
-        await message.answer("🚫 Нет доступа")
+        await message.answer("🚫 Немає доступа")
         return
 
     user_state[message.from_user.id] = {"step": "content"}
-    await message.answer("📨 Отправь пост (текст / медиа / файл)")
+    await message.answer("📨 Відправ пост (фото, відео, т. д.)")
 
 
 # ====== ОБЩИЙ ХЕНДЛЕР ======
@@ -91,23 +91,23 @@ async def handler(message: Message):
     if state["step"] == "content":
         state["msg"] = message
         state["step"] = "anon"
-        await message.answer("❓ Анонимный пост?", reply_markup=anon_kb)
+        await message.answer("❓ Анонімний пост?", reply_markup=anon_kb)
 
     # 2. Анонимность
     elif state["step"] == "anon":
-        state["anon"] = (message.text == "🎭 Анонимно")
+        state["anon"] = (message.text == "🎭 Анонімно")
         state["step"] = "confirm"
-        await message.answer("❗ Подтвердить отправку?", reply_markup=confirm_kb)
+        await message.answer("❗ Підтвердити відправку?", reply_markup=confirm_kb)
 
     # 3. Подтверждение
     elif state["step"] == "confirm":
 
-        if message.text == "❌ Отмена":
+        if message.text == "❌ Відмінити":
             user_state.pop(uid, None)
-            await message.answer("❌ Отменено", reply_markup=main_kb)
+            await message.answer("❌ Відмінено", reply_markup=main_kb)
             return
 
-        if message.text == "✅ Подтвердить":
+        if message.text == "✅ Підтвердити":
             global post_id
             post_id += 1
 
@@ -121,7 +121,7 @@ async def handler(message: Message):
             }
 
             await message.answer(
-                "📨 Отправка подтверждена\n⏳ Ожидайте модерации",
+                "📨 Відправка підтвержена\n⏳ Чекайте на рішення модерації",
                 reply_markup=main_kb
             )
 
@@ -144,8 +144,8 @@ async def send_to_mods(pid: int):
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text=f"👤 {author_text}", callback_data="noop")],
         [
-            InlineKeyboardButton(text="✅ Принять", callback_data=f"ok_{pid}"),
-            InlineKeyboardButton(text="❌ Отклонить", callback_data=f"no_{pid}")
+            InlineKeyboardButton(text="✅ Приняти", callback_data=f"ok_{pid}"),
+            InlineKeyboardButton(text="❌ Відклонити", callback_data=f"no_{pid}")
         ]
     ])
 
@@ -171,7 +171,7 @@ async def accept(call: CallbackQuery):
     data = posts.get(pid)
 
     if not data or is_closed(pid):
-        await call.answer("Уже обработано")
+        await call.answer("Вже опрацьовано")
         return
 
     data["status"] = "accepted"
@@ -189,7 +189,7 @@ async def accept(call: CallbackQuery):
     )
 
     await bot.copy_message(CHANNEL_ID, msg.chat.id, msg.message_id, reply_markup=kb)
-    await bot.send_message(data["user_id"], "✅ Пост опубликован!")
+    await bot.send_message(data["user_id"], "✅ Пост опублікований!")
 
     for mod, m1, m2 in data["mods"]:
         try:
@@ -199,26 +199,26 @@ async def accept(call: CallbackQuery):
             pass
 
     await call.message.delete()
-    await call.answer("Принято")
+    await call.answer("Прийнято")
 
 
 # ====== ОТКЛОНИТЬ ======
 @dp.callback_query(F.data.startswith("no_"))
 async def reject(call: CallbackQuery):
     if not await check_access(call.from_user.id):
-        await call.answer("Нет доступа", show_alert=True)
+        await call.answer("Немає доступа", show_alert=True)
         return
 
     pid = int(call.data.split("_")[1])
     data = posts.get(pid)
 
     if not data or is_closed(pid):
-        await call.answer("Уже обработано")
+        await call.answer("Вже опрацьовано")
         return
 
     data["status"] = "rejected"
 
-    await bot.send_message(data["user_id"], "❌ Пост отклонён")
+    await bot.send_message(data["user_id"], "❌ Пост відклонений")
 
     for mod, m1, m2 in data["mods"]:
         try:
@@ -228,7 +228,7 @@ async def reject(call: CallbackQuery):
             pass
 
     await call.message.delete()
-    await call.answer("Отклонено")
+    await call.answer("Відхилено")
 
 
 # ====== CALLBACK ЗАГЛУШКА ======
