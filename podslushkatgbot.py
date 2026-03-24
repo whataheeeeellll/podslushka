@@ -6,19 +6,20 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.filters import CommandStart
 from aiogram.enums import ParseMode
 
-TOKEN = "8592428729:AAGj4lCZ6W9_omkGWXsNc9eLT7zuLnvtrBA"
+TOKEN = "8592428729:AAHMWz-Mn7EhpAeKJ3sy5xVDM_esoUwucxA"
 CHANNEL_ID = -1003856412254
 MODERATORS = {7991967172, 1811346319}
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
-# ====== STATE ======
+# ====== СТАН ======
 user_state = {}
 posts = {}
 post_id = 0
 
-# ====== КЛАВИАТУРЫ ======
+
+# ====== КЛАВІАТУРИ ======
 main_kb = ReplyKeyboardMarkup(
     keyboard=[[KeyboardButton(text="📝 Новий пост")]],
     resize_keyboard=True
@@ -35,12 +36,13 @@ anon_kb = ReplyKeyboardMarkup(
 confirm_kb = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="✅ Підтвердити")],
-        [KeyboardButton(text="❌ Відміна")]
+        [KeyboardButton(text="❌ Скасувати")]
     ],
     resize_keyboard=True
 )
 
-# ====== ДОСТУП К КАНАЛУ ======
+
+# ====== ДОСТУП ======
 async def check_access(user_id: int) -> bool:
     try:
         member = await bot.get_chat_member(CHANNEL_ID, user_id)
@@ -49,32 +51,32 @@ async def check_access(user_id: int) -> bool:
         return False
 
 
-# ====== START ======
+# ====== /START ======
 @dp.message(CommandStart())
 async def start(message: Message):
     if not await check_access(message.from_user.id):
-        await message.answer("🚫 Немає доступа")
+        await message.answer("🚫 Немає доступу до каналу")
         return
 
     await message.answer(
-        "👋 <b>Подслушано бот</b>\n📝 Нажми «Новий пост»",
+        "👋 <b>Бот «Підслухано»</b>\n📝 Натисни «Новий пост»",
         parse_mode=ParseMode.HTML,
         reply_markup=main_kb
     )
 
 
-# ====== НОВЫЙ ПОСТ ======
-@dp.message(F.text == "📝 Новый пост")
+# ====== НОВИЙ ПОСТ ======
+@dp.message(F.text == "📝 Новий пост")
 async def new_post(message: Message):
     if not await check_access(message.from_user.id):
-        await message.answer("🚫 Немає доступа")
+        await message.answer("🚫 Немає доступу")
         return
 
     user_state[message.from_user.id] = {"step": "content"}
-    await message.answer("📨 Відправ пост (фото, відео, т. д.)")
+    await message.answer("📨 Надішли пост (текст, фото, відео тощо)")
 
 
-# ====== ОБЩИЙ ХЕНДЛЕР ======
+# ====== ОСНОВНИЙ ХЕНДЛЕР ======
 @dp.message()
 async def handler(message: Message):
     uid = message.from_user.id
@@ -91,20 +93,20 @@ async def handler(message: Message):
     if state["step"] == "content":
         state["msg"] = message
         state["step"] = "anon"
-        await message.answer("❓ Анонімний пост?", reply_markup=anon_kb)
+        await message.answer("❓ Опублікувати анонімно?", reply_markup=anon_kb)
 
-    # 2. Анонимность
+    # 2. Анонімність
     elif state["step"] == "anon":
         state["anon"] = (message.text == "🎭 Анонімно")
         state["step"] = "confirm"
-        await message.answer("❗ Підтвердити відправку?", reply_markup=confirm_kb)
+        await message.answer("❗ Підтвердити публікацію?", reply_markup=confirm_kb)
 
-    # 3. Подтверждение
+    # 3. Підтвердження
     elif state["step"] == "confirm":
 
-        if message.text == "❌ Відмінити":
+        if message.text == "❌ Скасувати":
             user_state.pop(uid, None)
-            await message.answer("❌ Відмінено", reply_markup=main_kb)
+            await message.answer("❌ Скасовано", reply_markup=main_kb)
             return
 
         if message.text == "✅ Підтвердити":
@@ -121,7 +123,7 @@ async def handler(message: Message):
             }
 
             await message.answer(
-                "📨 Відправка підтвержена\n⏳ Чекайте на рішення модерації",
+                "📨 Пост надіслано на модерацію",
                 reply_markup=main_kb
             )
 
@@ -129,13 +131,13 @@ async def handler(message: Message):
             user_state.pop(uid, None)
 
 
-# ====== ОТПРАВКА МОДЕРАЦИИ ======
+# ====== МОДЕРАЦІЯ ======
 async def send_to_mods(pid: int):
     data = posts[pid]
     msg = data["msg"]
 
     if data["anon"]:
-        author_text = "👤 Аноним"
+        author_text = "👤 Анонім"
     else:
         u = data["author"]
         username = f"@{u.username}" if u.username else "без username"
@@ -144,41 +146,37 @@ async def send_to_mods(pid: int):
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text=f"👤 {author_text}", callback_data="noop")],
         [
-            InlineKeyboardButton(text="✅ Приняти", callback_data=f"ok_{pid}"),
-            InlineKeyboardButton(text="❌ Відклонити", callback_data=f"no_{pid}")
+            InlineKeyboardButton(text="✅ Прийняти", callback_data=f"ok_{pid}"),
+            InlineKeyboardButton(text="❌ Відхилити", callback_data=f"no_{pid}")
         ]
     ])
 
     for mod in MODERATORS:
         m1 = await bot.copy_message(mod, msg.chat.id, msg.message_id)
-        m2 = await bot.send_message(mod, "👀 Модерация", reply_markup=kb)
+        m2 = await bot.send_message(mod, "👀 Модерація поста", reply_markup=kb)
         posts[pid]["mods"].append((mod, m1.message_id, m2.message_id))
 
 
-# ====== ПРОВЕРКА ======
+# ====== ПЕРЕВІРКА ======
 def is_closed(pid):
     return posts.get(pid, {}).get("status") != "pending"
 
 
-# ====== ПРИНЯТЬ ======
+# ====== ПРИЙНЯТИ ======
 @dp.callback_query(F.data.startswith("ok_"))
 async def accept(call: CallbackQuery):
-    if not await check_access(call.from_user.id):
-        await call.answer("Нет доступа", show_alert=True)
-        return
-
     pid = int(call.data.split("_")[1])
     data = posts.get(pid)
 
     if not data or is_closed(pid):
-        await call.answer("Вже опрацьовано")
+        await call.answer("Вже оброблено")
         return
 
     data["status"] = "accepted"
     msg = data["msg"]
 
     if data["anon"]:
-        author_text = "👤 Аноним"
+        author_text = "👤 Анонім"
     else:
         u = data["author"]
         username = f"@{u.username}" if u.username else "без username"
@@ -189,7 +187,7 @@ async def accept(call: CallbackQuery):
     )
 
     await bot.copy_message(CHANNEL_ID, msg.chat.id, msg.message_id, reply_markup=kb)
-    await bot.send_message(data["user_id"], "✅ Пост опублікований!")
+    await bot.send_message(data["user_id"], "✅ Пост опубліковано!")
 
     for mod, m1, m2 in data["mods"]:
         try:
@@ -202,23 +200,19 @@ async def accept(call: CallbackQuery):
     await call.answer("Прийнято")
 
 
-# ====== ОТКЛОНИТЬ ======
+# ====== ВІДХИЛИТИ ======
 @dp.callback_query(F.data.startswith("no_"))
 async def reject(call: CallbackQuery):
-    if not await check_access(call.from_user.id):
-        await call.answer("Немає доступа", show_alert=True)
-        return
-
     pid = int(call.data.split("_")[1])
     data = posts.get(pid)
 
     if not data or is_closed(pid):
-        await call.answer("Вже опрацьовано")
+        await call.answer("Вже оброблено")
         return
 
     data["status"] = "rejected"
 
-    await bot.send_message(data["user_id"], "❌ Пост відклонений")
+    await bot.send_message(data["user_id"], "❌ Ваш пост відхилено")
 
     for mod, m1, m2 in data["mods"]:
         try:
@@ -239,8 +233,9 @@ async def noop(call: CallbackQuery):
 
 # ====== RUN ======
 async def main():
-    print("bot started")
+    print("Бот запущено")
     await dp.start_polling(bot)
+
 
 if __name__ == "__main__":
     asyncio.run(main())
