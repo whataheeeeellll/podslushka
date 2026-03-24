@@ -6,7 +6,7 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.filters import CommandStart
 from aiogram.enums import ParseMode
 
-TOKEN = "YOUR_TOKEN"
+TOKEN = "8592428729:AAFn7KK5Ixp5y02rfMXgBr34fL9BNe2GD5E"
 CHANNEL_ID = -1003856412254
 MODERATORS = {7991967172, 1811346319}
 
