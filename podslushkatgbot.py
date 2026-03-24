@@ -157,10 +157,10 @@ async def send_to_mods(pid: int):
         else:
             u = data["author"]
             username = f"@{u.username}" if u.username else "без username"
-            author_text = f"{u.full_name} ({username})"
+            author_text = f"👤 {u.full_name} ({username})"
 
         kb = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text=f"👤 {author_text}", callback_data="noop")],
+            [InlineKeyboardButton(text=f"{author_text}", callback_data="noop")],
             [
                 InlineKeyboardButton(text="✅ Прийняти", callback_data=f"ok_{pid}"),
                 InlineKeyboardButton(text="❌ Відхилити", callback_data=f"no_{pid}")
