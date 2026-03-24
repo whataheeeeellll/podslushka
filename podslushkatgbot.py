@@ -13,7 +13,7 @@ logging.basicConfig(level=logging.INFO)
 
 TOKEN = "8592428729:AAHMWz-Mn7EhpAeKJ3sy5xVDM_esoUwucxA"
 CHANNEL_ID = -1003856412254
-MODERATORS = {7991967172, 1811346319}
+MODERATORS = {7991967172}
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
