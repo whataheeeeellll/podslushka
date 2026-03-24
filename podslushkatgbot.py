@@ -6,60 +6,92 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.filters import CommandStart
 from aiogram.enums import ParseMode
 
-TOKEN = "8592428729:AAFn7KK5Ixp5y02rfMXgBr34fL9BNe2GD5E"
-CHANNEL_ID = -1003856412254  # ID канала
-MODERATORS = {7991967172, 1811346319}     # ID модераторов
+TOKEN = "YOUR_TOKEN"
+CHANNEL_ID = -1003856412254
+MODERATORS = {7991967172, 1811346319}
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
-# ====== Стейты ======
+# ====== STATE ======
 user_state = {}
 posts = {}
 post_id = 0
 
-# ====== Клавиатуры ======
+# ====== КЛАВИАТУРЫ ======
 main_kb = ReplyKeyboardMarkup(
     keyboard=[[KeyboardButton(text="📝 Новый пост")]],
     resize_keyboard=True
 )
+
 anon_kb = ReplyKeyboardMarkup(
-    keyboard=[[KeyboardButton(text="🎭 Анонимно")],[KeyboardButton(text="👤 Не анонимно")]],
+    keyboard=[
+        [KeyboardButton(text="🎭 Анонимно")],
+        [KeyboardButton(text="👤 Не анонимно")]
+    ],
     resize_keyboard=True
 )
+
 confirm_kb = ReplyKeyboardMarkup(
-    keyboard=[[KeyboardButton(text="✅ Подтвердить")],[KeyboardButton(text="❌ Отмена")]],
+    keyboard=[
+        [KeyboardButton(text="✅ Подтвердить")],
+        [KeyboardButton(text="❌ Отмена")]
+    ],
     resize_keyboard=True
 )
+
+# ====== ДОСТУП К КАНАЛУ ======
+async def check_access(user_id: int) -> bool:
+    try:
+        member = await bot.get_chat_member(CHANNEL_ID, user_id)
+        return member.status in ["member", "administrator", "creator"]
+    except:
+        return False
+
 
 # ====== START ======
 @dp.message(CommandStart())
 async def start(message: Message):
+    if not await check_access(message.from_user.id):
+        await message.answer("🚫 Доступ закрыт")
+        return
+
     await message.answer(
-        "👋 <b>Подслушано бот</b>\n\n📝 Нажми «Новый пост», чтобы создать запись",
+        "👋 <b>Подслушано бот</b>\n📝 Нажми «Новый пост»",
         parse_mode=ParseMode.HTML,
         reply_markup=main_kb
     )
 
-# ====== Новый пост ======
+
+# ====== НОВЫЙ ПОСТ ======
 @dp.message(F.text == "📝 Новый пост")
 async def new_post(message: Message):
-    user_state[message.from_user.id] = {"step": "content"}
-    await message.answer("📨 Отправь пост (текст / фото / видео / файл)")
+    if not await check_access(message.from_user.id):
+        await message.answer("🚫 Нет доступа")
+        return
 
-# ====== Хендлер универсальный ======
+    user_state[message.from_user.id] = {"step": "content"}
+    await message.answer("📨 Отправь пост (текст / медиа / файл)")
+
+
+# ====== ОБЩИЙ ХЕНДЛЕР ======
 @dp.message()
 async def handler(message: Message):
     uid = message.from_user.id
+
+    if not await check_access(uid):
+        return
+
     if uid not in user_state:
         return
+
     state = user_state[uid]
 
     # 1. Контент
     if state["step"] == "content":
         state["msg"] = message
         state["step"] = "anon"
-        await message.answer("❓ Пост анонимный?", reply_markup=anon_kb)
+        await message.answer("❓ Анонимный пост?", reply_markup=anon_kb)
 
     # 2. Анонимность
     elif state["step"] == "anon":
@@ -69,13 +101,16 @@ async def handler(message: Message):
 
     # 3. Подтверждение
     elif state["step"] == "confirm":
+
         if message.text == "❌ Отмена":
             user_state.pop(uid, None)
             await message.answer("❌ Отменено", reply_markup=main_kb)
             return
+
         if message.text == "✅ Подтвердить":
             global post_id
             post_id += 1
+
             posts[post_id] = {
                 "msg": state["msg"],
                 "anon": state["anon"],
@@ -84,24 +119,30 @@ async def handler(message: Message):
                 "status": "pending",
                 "mods": []
             }
-            await message.answer("📨 <b>Отправка подтверждена</b>\n⏳ Ожидайте модерации...", parse_mode=ParseMode.HTML, reply_markup=main_kb)
+
+            await message.answer(
+                "📨 Отправка подтверждена\n⏳ Ожидайте модерации",
+                reply_markup=main_kb
+            )
+
             await send_to_mods(post_id)
             user_state.pop(uid, None)
 
-# ====== Отправка модераторам ======
+
+# ====== ОТПРАВКА МОДЕРАЦИИ ======
 async def send_to_mods(pid: int):
     data = posts[pid]
     msg = data["msg"]
 
     if data["anon"]:
-        author_text = "👤 Автор: Аноним"
+        author_text = "👤 Аноним"
     else:
         u = data["author"]
         username = f"@{u.username}" if u.username else "без username"
-        author_text = f"👤 Автор: {u.full_name} ({username})"
+        author_text = f"{u.full_name} ({username})"
 
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=author_text, callback_data="noop")],
+        [InlineKeyboardButton(text=f"👤 {author_text}", callback_data="noop")],
         [
             InlineKeyboardButton(text="✅ Принять", callback_data=f"ok_{pid}"),
             InlineKeyboardButton(text="❌ Отклонить", callback_data=f"no_{pid}")
@@ -109,80 +150,94 @@ async def send_to_mods(pid: int):
     ])
 
     for mod in MODERATORS:
-        m1 = await bot.copy_message(chat_id=mod, from_chat_id=msg.chat.id, message_id=msg.message_id)
-        m2 = await bot.send_message(mod, "👀 Модерация поста", reply_markup=kb)
+        m1 = await bot.copy_message(mod, msg.chat.id, msg.message_id)
+        m2 = await bot.send_message(mod, "👀 Модерация", reply_markup=kb)
         posts[pid]["mods"].append((mod, m1.message_id, m2.message_id))
 
-# ====== Проверка ======
-def closed(pid):
+
+# ====== ПРОВЕРКА ======
+def is_closed(pid):
     return posts.get(pid, {}).get("status") != "pending"
 
-# ====== Принять ======
+
+# ====== ПРИНЯТЬ ======
 @dp.callback_query(F.data.startswith("ok_"))
 async def accept(call: CallbackQuery):
+    if not await check_access(call.from_user.id):
+        await call.answer("Нет доступа", show_alert=True)
+        return
+
     pid = int(call.data.split("_")[1])
     data = posts.get(pid)
-    if not data or closed(pid):
-        await call.answer("Уже обработано ❌", show_alert=True)
+
+    if not data or is_closed(pid):
+        await call.answer("Уже обработано")
         return
+
     data["status"] = "accepted"
     msg = data["msg"]
 
     if data["anon"]:
-        author_text = "👤 Автор: Аноним"
+        author_text = "👤 Аноним"
     else:
         u = data["author"]
         username = f"@{u.username}" if u.username else "без username"
-        author_text = f"👤 Автор: {u.full_name} ({username})"
+        author_text = f"{u.full_name} ({username})"
 
-    kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=author_text, callback_data="noop")]])
-    await bot.copy_message(chat_id=CHANNEL_ID, from_chat_id=msg.chat.id, message_id=msg.message_id, reply_markup=kb)
-    await bot.send_message(data["user_id"], "✅ Пост прошёл модерацию и опубликован!")
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[[InlineKeyboardButton(text=author_text, callback_data="noop")]]
+    )
 
-    # Очистка модераторов
-    for mod, msg_id, text_id in data["mods"]:
+    await bot.copy_message(CHANNEL_ID, msg.chat.id, msg.message_id, reply_markup=kb)
+    await bot.send_message(data["user_id"], "✅ Пост опубликован!")
+
+    for mod, m1, m2 in data["mods"]:
         try:
-            await bot.delete_message(mod, msg_id)
-            await bot.delete_message(mod, text_id)
+            await bot.delete_message(mod, m1)
+            await bot.delete_message(mod, m2)
         except:
             pass
 
     await call.message.delete()
     await call.answer("Принято")
 
-# ====== Отклонить ======
+
+# ====== ОТКЛОНИТЬ ======
 @dp.callback_query(F.data.startswith("no_"))
 async def reject(call: CallbackQuery):
+    if not await check_access(call.from_user.id):
+        await call.answer("Нет доступа", show_alert=True)
+        return
+
     pid = int(call.data.split("_")[1])
     data = posts.get(pid)
-    if not data or closed(pid):
-        await call.answer("Уже обработано ❌", show_alert=True)
-        return
-    data["status"] = "rejected"
-    await bot.send_message(data["user_id"], "❌ Пост прошёл модерацию и не был опубликован!")
 
-    for mod, msg_id, text_id in data["mods"]:
+    if not data or is_closed(pid):
+        await call.answer("Уже обработано")
+        return
+
+    data["status"] = "rejected"
+
+    await bot.send_message(data["user_id"], "❌ Пост отклонён")
+
+    for mod, m1, m2 in data["mods"]:
         try:
-            await bot.delete_message(mod, msg_id)
-            await bot.delete_message(mod, text_id)
+            await bot.delete_message(mod, m1)
+            await bot.delete_message(mod, m2)
         except:
             pass
 
     await call.message.delete()
     await call.answer("Отклонено")
 
-# ====== “Ничего не делать” для кнопки автора ======
+
+# ====== CALLBACK ЗАГЛУШКА ======
 @dp.callback_query(F.data == "noop")
 async def noop(call: CallbackQuery):
-    await call.answer()  # просто заглушка
+    await call.answer()
+
 
 # ====== RUN ======
-async def main():
-    await dp.start_polling(bot)
-
-if __name__ == "__main__":
-    asyncio.run(main())
-
 async def main():
     print("bot started")
     await dp.start_polling(bot)
